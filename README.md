@@ -17,8 +17,9 @@ files in the cache and tries to ensure that only one primary offloader is
 chosen to handle each file and all its duplicate names.
 
 Among the features are on-the-fly reconfiguration of available redirection
-targets, burst detection of single-file hotspots and caching of results in a
-GDBM map to speed up subsequent requests.
+targets, cache-friendly handling of downed offload targets, burst detection of
+single-file hotspots and caching of results in a GDBM map to speed up
+subsequent requests.
 
 This work eventually became a part of the Master's thesis *Scaling a Content
 Delivery system for Open Source Software*, available at
