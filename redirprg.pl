@@ -78,7 +78,9 @@ use JSON;
 #use Data::Dumper;
 #$Data::Dumper::Sortkeys = 1;
 
-use lib '/var/conf/apache2';
+# Find our own module in the same directory as this script.
+use File::Basename;
+use lib dirname (__FILE__);
 use BurstDetector;
 
 my $nbuckets        = 2147483647; # Should fit into 32bit signed, for safety.
