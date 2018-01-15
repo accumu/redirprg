@@ -32,12 +32,15 @@ Requires perl and a few common modules, see the script for details.
 
 ## Redirprg
 
-The example redirprg\*.conf files should be used as a base for your
+The example `redirprg*.conf` files should be used as a base for your
 configuration. The format is JSON with comments.
 
 Do note that the config handling is very rudimentary,
 and not at all forgiving when it comes to parse errors or missing config
 items. Patches welcome :-)
+
+Using the included `test-json.pl` script is recommended to verify syntax
+before applying to production hosts.
 
 The script is started by Apache HTTPD, and thus needs to be present
 in the Apache HTTPD configuration.
