@@ -265,7 +265,8 @@ sub getcanonnameandip($)
     	$name .= ".$conf->{domain}";
     }
 
-    my ($err, @addrs) = getaddrinfo($name, undef, {flags=>AI_CANONNAME});
+    # LWP barfs on IPv6 URLs, so force IPv4
+    my ($err, @addrs) = getaddrinfo($name, undef, {flags=>AI_CANONNAME, family=>AF_INET});
     if($err) {
         warn "Error resolving $name: $err";
         return undef;
@@ -280,6 +281,7 @@ sub getcanonnameandip($)
         return undef;
     }
 
+    # For whenever LWP manages to handle v6 IP URLs again
     if($addrs[0]->{family} eq AF_INET6) {
         $hostip = "[$hostip]";
     }
