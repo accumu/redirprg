@@ -31,6 +31,29 @@ Requires perl and a few common modules, see the script for details.
 
 # Setup/config
 
+## Requirements
+
+All offload redirects uses the offload server host names, which implies
+that all files should be reachable using the default virtual host. This
+means that you have to ensure this is the case.
+
+### DocumentRoot
+
+There must be a base DocumentRoot common to all virtual hosts served
+by this server instance.
+
+As an example, consider an mirrors.example.com server that also provides
+a distro.example.com mirror for convenience and to fit in with the
+distro naming scheme.
+
+mirrors.example.com have DocumentRoot /srv/mirrors
+
+distro.example.com have DocumentRoot /srv/mirrors/distro
+
+`redirprg.pl` can work with this, provided that you ensure that the
+invoking RewriteRule adds the missing path component. See the example
+files for details.
+
 ## Redirprg
 
 The example `redirprg*.conf` files should be used as a base for your
