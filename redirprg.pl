@@ -255,7 +255,7 @@ sub wrap_pos($) {
 
 
 # Return the canonical name for a host.
-sub getcanonname($)
+sub getcanonnameandip($)
 {
     my $name = shift;
 
@@ -268,7 +268,23 @@ sub getcanonname($)
         warn "Error resolving $name: $err";
         return undef;
     }
-    return lc($addrs[0]->{canonname});
+
+    my $canonname = lc($addrs[0]->{canonname});
+
+    my ($gnerr, $hostip) = getnameinfo($addrs[0]->{addr}, NI_NUMERICHOST, NIx_NOSERV);
+
+    if($gnerr) {
+        warn "Resolving $name: getnameinfo: $gnerr";
+        return undef;
+    }
+
+    if($addrs[0]->{family} eq AF_INET6) {
+        $hostip = "[$hostip]";
+    }
+
+    debug("Using $hostip to check status of $canonname ($name)");
+
+    return ($canonname, $hostip);
 }
 
 
@@ -277,7 +293,7 @@ sub resolve_desthosts() {
     my $totweight = 0;
 
     for(my $i=0; $i <= $#$hosts; $i++) {
-        my $fqdn = getcanonname($hosts->[$i]->{name});
+        my ($fqdn, $hostip) = getcanonnameandip($hosts->[$i]->{name});
 
         unless($fqdn) {
             warn "host $hosts->[$i]->{name} not found, ignoring\n";
@@ -285,6 +301,7 @@ sub resolve_desthosts() {
         }
 
         $hosts->[$i]->{fqdn} = $fqdn;
+        $hosts->[$i]->{hostip} = $hostip;
 
         if($myfqdn{$fqdn}) {
             $is_desthost = 1;
@@ -339,7 +356,7 @@ sub get_myfqdn() {
     my $fqdn;
     
     while(1) {
-        $fqdn= getcanonname($n);
+        ($fqdn, undef) = getcanonnameandip($n);
         last if($fqdn);
         sleep 1;
     }
@@ -657,7 +674,7 @@ sub initfixed() {
         $fixedhvals{$hash} = $k;
         $fixed->{$k}{time} = time();
         for(my $i=0; $i <= $#{$fixed->{$k}{hosts}}; $i++) {
-            my $fqdn = getcanonname($fixed->{$k}{hosts}->[$i]);
+            my ($fqdn, undef) = getcanonnameandip($fixed->{$k}{hosts}->[$i]);
             if($fqdn) {
                 push @{$fixed->{$k}{hostidx}}, get_desthost($fqdn, $fixed->{$k}{hosts}->[$i]);
             }
@@ -891,7 +908,9 @@ sub hostcheckloop() {
             if($hosts->[$i]->{checkuri}) {
                 $uri = $hosts->[$i]->{checkuri};
             }
-            my $resp = $ua->head("http://$hosts->[$i]->{fqdn}$uri");
+            # Use IP address here so we don't have to cater for DNS
+            # issues affecting our timeout.
+            my $resp = $ua->head("http://$hosts->[$i]->{hostip}$uri");
             if($resp->is_success) {
                 if(!$hosts->[$i]->{up}) {
                     $hosts->[$i]->{up} = 1;
