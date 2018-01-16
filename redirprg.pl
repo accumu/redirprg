@@ -1,6 +1,5 @@
 #!/usr/bin/perl
 # vim:et:sts=4:sw=4:ai:
-# $Id: redirprg.pl,v 2.6 2017/02/17 18:44:31 root Exp $
 
 # Copyright 2007-2018 Niklas Edmundsson <nikke@acc.umu.se>
 #
@@ -1235,7 +1234,7 @@ if($burstcheckpid) {
     $sel->add(\*BURSTCHECK);
 }
 
-notice '$Id: redirprg.pl,v 2.6 2017/02/17 18:44:31 root Exp $'." started\n";
+notice "redirprg.pl started\n";
 
 # Sit in this loop forever, serving targets for URI:s one at a time.
 while(1) {
