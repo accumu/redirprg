@@ -20,9 +20,6 @@ use strict;
 use warnings;
 
 
-# FIXME: Command-line argument?
-my $cfgbase         = "/var/conf/apache2/redirprg";
-
 # End of configuration
 # ==========================================================================
 
@@ -79,7 +76,6 @@ use JSON;
 #$Data::Dumper::Sortkeys = 1;
 
 # Find our own module in the same directory as this script.
-use File::Basename;
 use lib dirname (__FILE__);
 use BurstDetector;
 
@@ -88,9 +84,6 @@ my $nbuckets        = 2147483647; # Should fit into 32bit signed, for safety.
 my $hosts; # Ref to array of target hosts
 my $fixed; # Ref to hash of fixed redirects
 my $conf; # Ref to config hash
-my $cfgmain         = "$cfgbase.conf";
-my $cfghosts        = "$cfgbase-hosts.conf";
-my $cfgfixed        = "$cfgbase-fixed.conf";
 my $lastpurge;
 my %myfqdn;
 my %entries;
@@ -103,6 +96,15 @@ my $is_desthost = 0;
 my $iterinterval;
 my $logprogname = 'redirprg';
 
+# Default to finding config in same dir as this script, but allow
+# passing the cfgbase as argument.
+my $cfgbase         = dirname(__FILE__) . "/redirprg";
+if($ARGV[0]) {
+    $cfgbase = $ARGV[0];
+}
+my $cfgmain         = "$cfgbase.conf";
+my $cfghosts        = "$cfgbase-hosts.conf";
+my $cfgfixed        = "$cfgbase-fixed.conf";
 # ------------------------------------------------------------------------
 
 # Returns preamble for all log messages, styled to roughly match what
