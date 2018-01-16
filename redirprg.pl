@@ -284,7 +284,7 @@ sub getcanonnameandip($)
         $hostip = "[$hostip]";
     }
 
-    debug("Using $hostip to check status of $canonname ($name)");
+    debug("Using $hostip to check status of $canonname ($name)\n");
 
     return ($canonname, $hostip);
 }
