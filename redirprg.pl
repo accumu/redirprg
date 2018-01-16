@@ -2,7 +2,7 @@
 # vim:et:sts=4:sw=4:ai:
 # $Id: redirprg.pl,v 2.6 2017/02/17 18:44:31 root Exp $
 
-# Copyright 2007-2016 Niklas Edmundsson <nikke@acc.umu.se>
+# Copyright 2007-2018 Niklas Edmundsson <nikke@acc.umu.se>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
