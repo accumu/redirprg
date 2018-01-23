@@ -155,6 +155,8 @@ sub readjsonconf {
         return undef;
     }
 
+    debug("Loading configuration from $file\n");
+
     # Read file and remove comments.
     my @cfg = grep(!/^\s*#/, (<$fh>));
 
