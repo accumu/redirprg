@@ -212,7 +212,7 @@ sub timestep
 # Ties GDBM file $conf->{dbfile} to %DB hash.
 sub tiedb
 {
-    if(!tie (%DB, 'GDBM_File', $conf->{dbfile}, O_RDWR|O_CREAT, 0644)) {
+    if(!tie (%DB, 'GDBM_File', $conf->{dbfile}, &GDBM_WRCREAT, 0644)) {
         warn "Couldn't open $conf->{dbfile} for writing: $!\n";
         return 0;
     }
