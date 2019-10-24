@@ -798,25 +798,31 @@ sub findfixed($$) {
 
 
 # Purge old records.
-sub dopurge($) {
-    my $maxage = shift;
+sub dopurge {
+    my ($maxage, $limit, $quick) = @_;
     my $key;
+
+    if(!$limit) {
+        $limit = -1;
+    }
 
     my $now = time();
     my %fchanged;
 
-    # Re-stat all fixed redirects every time we're doing a purge.
-    while ($key = each %{$fixed}) {
-        my($inode, $size) = get_inode_size($key);
-        my $newhash = findhash($key, $inode);
-        if($newhash != $fixed->{$key}{hash}) {
-            $fchanged{$fixed->{$key}{hash}} = $newhash;
-            delete $fixedhvals{$fixed->{$key}{hash}};
-            $fixedhvals{$newhash} = $key;
-            $fixed->{$key}{hash} = $newhash;
-            notice "Updated fixed redirect '$key'\n";
+    if(!$quick) {
+        # Re-stat all fixed redirects every time we're doing a purge.
+        while ($key = each %{$fixed}) {
+            my($inode, $size) = get_inode_size($key);
+            my $newhash = findhash($key, $inode);
+            if($newhash != $fixed->{$key}{hash}) {
+                $fchanged{$fixed->{$key}{hash}} = $newhash;
+                delete $fixedhvals{$fixed->{$key}{hash}};
+                $fixedhvals{$newhash} = $key;
+                $fixed->{$key}{hash} = $newhash;
+                notice "Updated fixed redirect '$key'\n";
+            }
+            $fixed->{$key}{time} = $now;
         }
-        $fixed->{$key}{time} = $now;
     }
 
     if(!tiedb()) {
@@ -829,6 +835,8 @@ sub dopurge($) {
             delete $entries{$key};
             delete $DB{$key};
             notice "Purged $key from DB\n";
+            $limit--;
+            last unless($limit);
             next;
         }
 
@@ -839,7 +847,7 @@ sub dopurge($) {
             $entries{$key}{hash} = $fchanged{$entries{$key}{hash}};
         }
 
-        if($entries{$key}{dostatcheck}) {
+        if(!$quick && $entries{$key}{dostatcheck}) {
             # Recheck entries that change inode without changing their name.
             my($inode, $size) = get_inode_size($key);
             my $hash = findhash($key, $inode);
@@ -868,11 +876,13 @@ sub dopurge($) {
 
     untiedb();
 
-    updatefixed();
-    updateburstfiles();
+    if(!$quick) {
+        updatefixed();
+        updateburstfiles();
 
-    # Aim to do purging simultaneously on all hosts.
-    $lastpurge = timestep($now, $conf->{purgeinterval});
+        # Aim to do purging simultaneously on all hosts.
+        $lastpurge = timestep($now, $conf->{purgeinterval});
+    }
 }
 
 
@@ -1438,10 +1448,11 @@ while(1) {
     # Purge DB if we get too many entries.
     if(scalar keys(%entries) > $conf->{maxentries}) {
         notice "DB Purge start, over maxentries limit, before: ".scalar keys(%entries)." entries\n";
-        my $threshold = int($conf->{maxentries} * 0.9);
+        my $limit = int($conf->{maxentries} * 0.1);
+        my $threshold = $conf->{maxentries} - $limit;
         my $age = int($conf->{maxage} / 2);
         for(; scalar keys(%entries) > $threshold; $age = int($age / 2)) {
-            dopurge($age);
+            dopurge($age, $limit, 1);
         }
         notice "DB Purge done, after: ".scalar keys(%entries)." entries using maxage=$age\n";
     }
