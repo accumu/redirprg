@@ -212,7 +212,16 @@ sub timestep
 # Ties GDBM file $conf->{dbfile} to %DB hash.
 sub tiedb
 {
-    if(!tie (%DB, 'GDBM_File', $conf->{dbfile}, &GDBM_WRCREAT, 0644)) {
+    my $createnew = shift;
+
+    my $rwmode;
+    if($createnew) {
+        $rwmode = &GDBM_NEWDB;
+    }
+    else {
+        $rwmode = &GDBM_WRCREAT;
+    }
+    if(!tie (%DB, 'GDBM_File', $conf->{dbfile}, $rwmode, 0644)) {
         warn "Couldn't open $conf->{dbfile} for writing: $!\n";
         return 0;
     }
@@ -1213,8 +1222,7 @@ die "$cfgfixed broken" unless($fixed);
 $lastpurge = timestep(time(), $conf->{purgeinterval});
 
 # Init new empty DB
-unlink($conf->{dbfile});
-if(tiedb()) {
+if(tiedb(1)) {
     untiedb();
 }
 
