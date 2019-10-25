@@ -817,6 +817,7 @@ sub dopurge {
 
     my $now = time();
     my %fchanged;
+    my $createnewdb = 0;
 
     if(!$quick) {
         # Re-stat all fixed redirects every time we're doing a purge.
@@ -832,9 +833,17 @@ sub dopurge {
             }
             $fixed->{$key}{time} = $now;
         }
+
+        my ($dbsize,$blksize) = (stat($conf->{dbfile}))[7,11];
+        my $dbmaxsize = $conf->{maxentries} * $blksize;
+        if($dbsize > $dbmaxsize) {
+            notice "DB size $dbsize larger than maxsize $dbmaxsize, reclaiming space by creating new DB file\n";
+            
+            $createnewdb = 1;
+        }
     }
 
-    if(!tiedb()) {
+    if(!tiedb($createnewdb)) {
         return;
     }
 
@@ -880,6 +889,10 @@ sub dopurge {
                 }
                 notice "$msg\n";
             }
+        }
+        if($createnewdb) {
+            # Seed new DB file with all our entries
+            $DB{$key} = $entries{$key}{val};
         }
     }
 
