@@ -404,11 +404,9 @@ sub finddest
 
     # Don't do redirect for non-existant files or small objects.
     if(!defined($size)) {
-        debug "'${$fileref}' not redirected - No such file or directory\n" if(!$quiet);
         return "_";
     }
     if($size < $conf->{minredirsize}) {
-        debug "'${$fileref}' not redirected - size $size < $conf->{minredirsize}\n" if(!$quiet);
         return "_";
     }
 
