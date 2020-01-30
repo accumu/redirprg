@@ -24,10 +24,10 @@ use warnings;
 
 
 # This Apache HTTPD RewriteMap program returns a target for redirection given
-# a URI. For performance it's meant to be used with a GDBM map as a cache, so
-# requests first query the GDBM map before doing a query to this program which
+# a URI. For performance it's meant to be used with a SDBM map as a cache, so
+# requests first query the SDBM map before doing a query to this program which
 # caches the result in the map. This program takes care of all housekeeping
-# of the GDBM.
+# of the SDBM.
 #
 # Idea of operation: Map all hosts onto a pie chart with $nbuckets positions,
 # size scaled according to weight. When a host vanishes for some reason, the
@@ -62,7 +62,8 @@ use LWP::UserAgent;
 use HTTP::Request::Common;
 use Digest::MD5 qw(md5_hex);
 use Math::BigInt;
-use GDBM_File;
+use Fcntl;   # For O_RDWR, O_CREAT, etc. used by SDBM_File
+use SDBM_File;
 use Fcntl;
 use File::Tail;
 use File::Basename;
@@ -87,6 +88,7 @@ my $lastpurge;
 my %myfqdn;
 my %entries;
 my %DB;
+my $dbfilename=""; # The actual (main) DB file
 my %fixedhvals;
 my %burstfiles;
 my $iter = 0;
@@ -209,22 +211,26 @@ sub timestep
 }
 
 
-# Ties GDBM file $conf->{dbfile} to %DB hash.
+# Ties SDBM file $conf->{dbfile} to %DB hash.
 sub tiedb
 {
     my $createnew = shift;
 
     my $rwmode;
     if($createnew) {
-        $rwmode = &GDBM_NEWDB;
+        $rwmode = O_RDWR|O_CREAT|O_TRUNC;
     }
     else {
-        $rwmode = &GDBM_WRCREAT;
+        $rwmode = O_RDWR;
     }
-    if(!tie (%DB, 'GDBM_File', $conf->{dbfile}, $rwmode, 0644)) {
+    if(!tie (%DB, 'SDBM_File', $conf->{dbfile}, $rwmode, 0644)) {
         warn "Couldn't open $conf->{dbfile} for writing: $!\n";
         return 0;
     }
+
+    # SDBM is comprised of two files, so $conf->{dbfile} is just the basename.
+    # This file is the one holding the data and growing large.
+    $dbfilename = $conf->{dbfile} . SDBM_File::PAGFEXT;
 
     return 1;
 }
@@ -834,13 +840,19 @@ sub dopurge {
             $fixed->{$key}{time} = $now;
         }
 
-        my ($dbsize,$blksize) = (stat($conf->{dbfile}))[7,11];
-        my $dbmaxsize = $conf->{maxentries} * $blksize;
-        if($dbsize > $dbmaxsize) {
-            notice "DB size $dbsize larger than maxsize $dbmaxsize, reclaiming space by creating new DB file\n";
-            
-            $createnewdb = 1;
+        my ($dbsize,$blksize) = (stat($dbfilename))[7,11];
+        if(defined($blksize)) {
+            my $dbmaxsize = $conf->{maxentries} * $blksize;
+            if($dbsize > $dbmaxsize) {
+                notice "DB size $dbsize larger than maxsize $dbmaxsize, reclaiming space by creating new DB file\n";
+                
+                $createnewdb = 1;
+            }
         }
+        else {
+            warn "Couldn't stat $dbfilename: $!\n";
+        }
+            
     }
 
     if(!tiedb($createnewdb)) {

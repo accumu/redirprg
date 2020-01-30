@@ -19,13 +19,13 @@
 use strict;
 use warnings;
 
-use GDBM_File;
+use SDBM_File;
 use Fcntl;
 
 my %DB;
 my $dbfile = "/var/run/apache2.redirdb";
 
-tie (%DB, 'GDBM_File', $dbfile, O_RDONLY, 0644) or die "Couldn't open $dbfile!\n";
+tie (%DB, 'SDBM_File', $dbfile, O_RDONLY, 0644) or die "Couldn't open $dbfile!\n";
 
 my $summary=0;
 if($ARGV[0] && $ARGV[0] eq "-c") {
