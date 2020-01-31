@@ -1092,11 +1092,14 @@ sub burstcheckloop() {
         }
     }
 
+    # Base purge interval on the age of records
+    my $spurgeinterval = $conf->{maxseenage} * 2;
+
     while(1) {
         my ($nfound,$timeleft,@pending)=File::Tail::select(undef,undef,undef,$timeout,$log);
 
         if(scalar keys(%seenfiles) > $conf->{maxseenentries} 
-                || $lastpurge + $conf->{purgeinterval} < time()) 
+                || $lastpurge + $spurgeinterval < time()) 
         {
             my $before = scalar keys(%seenfiles);
             my $cutoff = time()-$conf->{maxseenage};
@@ -1106,11 +1109,13 @@ sub burstcheckloop() {
                         delete $seenfiles{$key};
                     }
                 }
-                $cutoff += 7200;
+                $cutoff += int($conf->{maxseenage}/24)+1;
             } while(scalar keys(%seenfiles) > $conf->{maxseenentries});
             my $after = scalar keys(%seenfiles);
             $lastpurge = time();
-            notice("Purged old ip:file records, before=$before after=$after\n");
+            if($before != $after) {
+                debug("Purged old ip:file records, before=$before after=$after\n");
+            }
         }
 
         my @res;
@@ -1125,7 +1130,10 @@ sub burstcheckloop() {
                 my $size = $5;
                 my $file = $6;
 
-                next if($seenfiles{"$ip:$file"});
+                # Avoid registering parallel downloaders as multiple downloads
+                if($seenfiles{"$ip:$file"} && $seenfiles{"$ip:$file"} >= int($time)-$conf->{maxseenage}) {
+                    next;
+                }
                 $seenfiles{"$ip:$file"} = int($time);
 
                 @res = BurstDetector::reg_offload($time, $target, $size, $file);
