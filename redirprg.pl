@@ -539,7 +539,9 @@ sub calc_intervals() {
         }
         if($newdest ne $ref->{val}) {
             notice "Change $key: $ref->{val} -> $newdest\n";
-            $DB{$key} = $newdest;
+            eval {
+                $DB{$key} = $newdest;
+            };
             $ref->{val} = $newdest;
         }
     }
@@ -767,7 +769,9 @@ sub updateburstfiles() {
         next unless($newdest);
         if($newdest ne $entries{$key}{val}) {
             notice "Change $key: $entries{$key}{val} -> $newdest\n";
-            $DB{$key} = $newdest;
+            eval {
+                $DB{$key} = $newdest;
+            };
             $entries{$key}{val} = $newdest;
         }
     }
@@ -893,7 +897,9 @@ sub dopurge {
                 }
                 $msg .= ")";
                 if($res ne $entries{$key}{val}) {
-                    $DB{$key} = $res;
+                    eval {
+                        $DB{$key} = $res;
+                    };
                     $entries{$key}{val}  = $res;
                     $msg .= " -> $res";
                 }
@@ -902,7 +908,9 @@ sub dopurge {
         }
         if($createnewdb) {
             # Seed new DB file with all our entries
-            $DB{$key} = $entries{$key}{val};
+            eval {
+                $DB{$key} = $entries{$key}{val};
+            };
         }
     }
 
@@ -1419,7 +1427,12 @@ while(1) {
                     $res = finddest(0, \$str, $hash, $size);
                 }
                 if(tiedb()) {
-                    $DB{$str} = $res;
+                    eval {
+                        $DB{$str} = $res;
+                    };
+                    if($@) {
+                        notice($@);
+                    }
                     untiedb();
                 }
 
