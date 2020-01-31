@@ -1278,6 +1278,9 @@ sub catch_sig {
     exit;
 }
 
+# die() handler, but not in eval{}...
+$SIG{__DIE__} = sub {die @_ if $^S; my $l = logpreamble('emerg').$_[0]; print STDERR $l; catch_sig("DIE");};
+
 $SIG{'INT'}=$SIG{'HUP'}=$SIG{'TERM'} = \&catch_sig;
 
 my $sel = IO::Select->new(\*STDIN, \*HOSTCHECK);
