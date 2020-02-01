@@ -45,6 +45,7 @@ my %config_keys = (
 	targetfactor => 'Target burst threshold factor, float',
 	filefactor => 'File burst threshold factor, float',
 	pretrigfactor => 'File pre-trigger factor, float',
+	filetrigslots => 'Need this many consecutive time slots fullfilling the trigger condition before trigger happens',
 	minfileimpact => 'Lower limit on files to track, bytes/s',
 	minbwhist => 'Ignore historical values lower than this, bytes/s',
 	timeslotsize => 'Size of time slots',
@@ -63,6 +64,7 @@ my %config = (
 		targetfactor	=> 4, # 4 s.d. =~ 99.997% quantile
 		filefactor	=> 3, # 3 s.d. =~ 99.9% quantile
 		pretrigfactor	=> 1, # 1 s.d. =~ 68% quantile
+		filetrigslots	=> 2, # 1 up to avgslots
 		minfileimpact	=> 5000,
 		minbwhist	=> 5000000,
 		timeslotsize	=> 20,
@@ -379,10 +381,24 @@ sub analyze_timeslot($)
 		my $tval = int(mean($offloads{$target}{avgvec})/$timeslotsize);
 
 		next if($tval < $tthres);
-		debugprint "BURST on $target at $timeslot: val $tval B/s tthres $tthres B/s\n";
+		debugprint "Examining $target for file burst candidates at $timeslot: val $tval B/s tthres $tthres B/s\n";
 		foreach my $file(keys %{$offloads{$target}}) {
 			next unless($file =~ /^\//); # skip non-files
 			next if(defined($burstfiles{$file}));
+			# Allow configuring the number of consecutive timeslots
+			# needed to even consider a file as a burst candidate.
+			# This is to avoid one download of a huge file to
+			# register as a burst.
+			my $slotsactive = 0;
+			foreach my $otf (reverse $offloads{$target}{$file}->query()) {
+				if($otf) {
+					$slotsactive++;
+				}
+				else {
+					last;
+				}
+			}
+			next unless($slotsactive >= get_config($target, 'filetrigslots'));
 			my $fval = int(mean($offloads{$target}{$file})/$timeslotsize);
 			if($fval >= $fthres) {
 				push @{$burstfiles{$file}{times}}, $timeslot;
