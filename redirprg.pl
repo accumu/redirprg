@@ -1101,7 +1101,7 @@ sub burstcheckloop() {
     }
 
     # Base purge interval on the age of records
-    my $spurgeinterval = $conf->{maxseenage} * 2;
+    my $spurgeinterval = $conf->{minseenexpire} * 2;
 
     while(1) {
         my ($nfound,$timeleft,@pending)=File::Tail::select(undef,undef,undef,$timeout,$log);
@@ -1110,14 +1110,14 @@ sub burstcheckloop() {
                 || $lastpurge + $spurgeinterval < time()) 
         {
             my $before = scalar keys(%seenfiles);
-            my $cutoff = time()-$conf->{maxseenage};
+            my $cutoff = time();
             do {
                 while (my ($key, $value) = each %seenfiles) {
                     if($value < $cutoff) {
                         delete $seenfiles{$key};
                     }
                 }
-                $cutoff += int($conf->{maxseenage}/24)+1;
+                $cutoff += int($conf->{minseenexpire}/24)+1;
             } while(scalar keys(%seenfiles) > $conf->{maxseenentries});
             my $after = scalar keys(%seenfiles);
             $lastpurge = time();
@@ -1139,10 +1139,18 @@ sub burstcheckloop() {
                 my $file = $5;
 
                 # Avoid registering parallel downloaders as multiple downloads
-                if($seenfiles{"$ip:$file"} && $seenfiles{"$ip:$file"} >= int($time)-$conf->{maxseenage}) {
+                if($seenfiles{"$ip:$file"} && $seenfiles{"$ip:$file"} >= int($time)) {
                     next;
                 }
-                $seenfiles{"$ip:$file"} = int($time);
+
+                # Base the ip:file expire time on the size, bigger files
+                # take longer to download and thus have higher probability of
+                # seeing parallel downloads.
+                my $expire = int($size/$conf->{seenexpiresizefactor});
+                if($expire < $conf->{minseenexpire}) {
+                    $expire = $conf->{minseenexpire};
+                }
+                $seenfiles{"$ip:$file"} = int($time) + $expire;
 
                 @res = BurstDetector::reg_offload($time, $target, $size, $file);
             }
