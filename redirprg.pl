@@ -1130,13 +1130,13 @@ sub burstcheckloop() {
         my $time;
         if($nfound) {
             my $line = $log->read;
-            # 1425942016.073 85.17.164.205 caesar.acc.umu.se 232134656 /debian-cd/7.8.0/armel/iso-cd/debian-7.8.0-armel-netinst.iso
-            if($line =~ /^(\d+)\S*\s(\S+)\s(|GET\s)(\S+)\s(\d+)\s(.+)$/) {
+            # 1580570309.494 127.22.123.45 GET host.ftp.acc.umu.se 10969556 /ubuntu/pool/main/l/linux-hwe/linux-headers-5.3.0-28_5.3.0-28.30~18.04.1_all.deb
+            if($line =~ /^(\d+)\S*\s(\S+)\sGET\s(\S+)\s(\d+)\s(.+)$/) {
                 $time = $1;
                 my $ip = $2;
-                my $target = $4;
-                my $size = $5;
-                my $file = $6;
+                my $target = $3;
+                my $size = $4;
+                my $file = $5;
 
                 # Avoid registering parallel downloaders as multiple downloads
                 if($seenfiles{"$ip:$file"} && $seenfiles{"$ip:$file"} >= int($time)-$conf->{maxseenage}) {
