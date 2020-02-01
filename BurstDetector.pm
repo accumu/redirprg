@@ -415,7 +415,7 @@ sub analyze_timeslot($)
 				if($burstfiles{$file}) {
 					$nextbf += $burstfiles{$file}{burstfactor};
 				}
-				debugprint "BURST($nextbf) on $target at $timeslot: fval $fval B/s fprethres $fprethres B/s file $file\n";
+				debugprint "BURST(P$nextbf) on $target at $timeslot: fval $fval B/s fprethres $fprethres B/s file $file\n";
 				push @ret, $file, "P$nextbf";
 			}
 		}
