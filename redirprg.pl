@@ -69,6 +69,7 @@ use File::Tail;
 use File::Basename;
 use File::Path qw(make_path);
 use POSIX qw(strftime);
+use Time::HiRes;
 use JSON;
 
 # FIXME: Debug
@@ -114,8 +115,10 @@ sub logpreamble
 {
     my $level = shift;
     $level = 'notice' unless($level);
+    my ($t, $us) = Time::HiRes::gettimeofday();
+    $us = sprintf("%06d", $us);
 
-    return "[". scalar localtime() . "] [$logprogname:$level] [pid $$] ";
+    return strftime("[%a %b %d %T.$us %Y] [$logprogname:$level] [pid $$] ", localtime($t));
 }
 
 
