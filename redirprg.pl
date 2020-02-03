@@ -1518,6 +1518,7 @@ while(1) {
         my $threshold = $conf->{maxentries} - $limit;
         my $age = int($conf->{maxage} / 2);
         for(; scalar keys(%entries) > $threshold; $age = int($age / 2)) {
+            $limit = scalar keys(%entries) - $threshold;
             dopurge($age, $limit, 1);
         }
         notice "DB Purge done, after: ".scalar keys(%entries)." entries using maxage=$age\n";
