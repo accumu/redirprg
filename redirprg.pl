@@ -1514,7 +1514,7 @@ while(1) {
     # Purge DB if we get too many entries.
     if(scalar keys(%entries) > $conf->{maxentries}) {
         notice "DB Purge start, over maxentries limit, before: ".scalar keys(%entries)." entries\n";
-        my $limit = int($conf->{maxentries} * 0.1);
+        my $limit = int($conf->{maxentries} * 0.01);
         my $threshold = $conf->{maxentries} - $limit;
         my $age = int($conf->{maxage} / 2);
         for(; scalar keys(%entries) > $threshold; $age = int($age / 2)) {
