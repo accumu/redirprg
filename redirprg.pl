@@ -865,7 +865,12 @@ sub dopurge {
     }
 
     while ($key = each %entries) {
-        if($entries{$key}{time} + $maxage < $now) {
+        # Revalidate dostatcheck entries by throwing them out and have
+        # new accesses bring them in again. That spreads the time needed
+        # to do the stat():s, doing them all at once can take tens of seconds
+        # for tens of thousands of entries.
+        if($entries{$key}{dostatcheck} || $entries{$key}{time} + $maxage < $now)
+        {
             # Delete old entry
             delete $entries{$key};
             delete $DB{$key};
@@ -880,34 +885,6 @@ sub dopurge {
             # all our entries always points to the same file. This won't
             # always be true, but it avoids a lot of stat's and is good enough
             $entries{$key}{hash} = $fchanged{$entries{$key}{hash}};
-        }
-
-        if(!$quick && $entries{$key}{dostatcheck}) {
-            # Recheck entries that change inode without changing their name.
-            my($inode, $size) = get_inode_size($key);
-            my $hash = findhash($key, $inode);
-            if($hash != $entries{$key}{hash}) {
-                my $res = findfixed($hash, $size);
-                if(!$res) {
-                    $res = finddest(1, \$key, $hash, $size);
-                }
-                $entries{$key}{size} = $size;
-                $entries{$key}{hash} = $hash;
-
-                my $msg = "Updated changed entry '$key' (hash: $hash";
-                if(defined($inode)) {
-                    $msg .= ", inode: $inode";
-                }
-                $msg .= ")";
-                if($res ne $entries{$key}{val}) {
-                    eval {
-                        $DB{$key} = $res;
-                    };
-                    $entries{$key}{val}  = $res;
-                    $msg .= " -> $res";
-                }
-                notice "$msg\n";
-            }
         }
         if($createnewdb) {
             # Seed new DB file with all our entries
