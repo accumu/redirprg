@@ -875,8 +875,10 @@ sub dopurge {
             delete $entries{$key};
             delete $DB{$key};
             notice "Purged $key from DB\n";
-            $limit--;
-            last unless($limit);
+            if($quick) {
+                $limit--;
+                last unless($limit);
+            }
             next;
         }
 
