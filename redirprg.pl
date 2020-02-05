@@ -746,7 +746,9 @@ sub updatefixed() {
         next unless($newdest);
         if($newdest ne $ref->{val}) {
             notice "Change $key: $ref->{val} -> $newdest\n";
-            $DB{$key} = $newdest;
+            eval {
+                $DB{$key} = $newdest;
+            };
             $ref->{val} = $newdest;
         }
     }
