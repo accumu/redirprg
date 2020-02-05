@@ -90,6 +90,7 @@ my %myfqdn;
 my %entries;
 my %DB;
 my $dbfilename=""; # The actual (main) DB file
+my $dbentries = 0;
 my %fixedhvals;
 my %burstfiles;
 my $iter = 0;
@@ -821,12 +822,8 @@ sub findfixed($$) {
 
 # Purge old records.
 sub dopurge {
-    my ($maxage, $limit, $quick) = @_;
+    my ($maxage, $cachelimit, $dblimit, $quick) = @_;
     my $key;
-
-    if(!$limit) {
-        $limit = -1;
-    }
 
     my $now = time();
     my %fchanged;
@@ -849,7 +846,7 @@ sub dopurge {
 
         my ($dbsize,$blksize) = (stat($dbfilename))[7,11];
         if(defined($blksize)) {
-            my $dbmaxsize = $conf->{maxentries} * $blksize;
+            my $dbmaxsize = $conf->{maxdb} * $blksize;
             if($dbsize > $dbmaxsize) {
                 notice "DB size $dbsize larger than maxsize $dbmaxsize, reclaiming space by creating new DB file\n";
                 
@@ -871,15 +868,22 @@ sub dopurge {
         # new accesses bring them in again. That spreads the time needed
         # to do the stat():s, doing them all at once can take tens of seconds
         # for tens of thousands of entries.
-        if($entries{$key}{dostatcheck} || $entries{$key}{time} + $maxage < $now)
+        if( $entries{$key}{dostatcheck} || 
+            (($entries{$key}{btime} + $maxage < $now) && (!$quick || !$entries{$key}{indb} || $dblimit > 0)) )
         {
             # Delete old entry
+            my $delorigin = "cache";
+            if($entries{$key}{indb}) {
+                delete $DB{$key};
+                $dbentries--;
+                $delorigin = "DB";
+                $dblimit-- if($quick);
+            }
             delete $entries{$key};
-            delete $DB{$key};
-            notice "Purged $key from DB\n";
+            $cachelimit-- if($quick);
+            notice "Purged $key from $delorigin\n";
             if($quick) {
-                $limit--;
-                last unless($limit);
+                last if($cachelimit<=0 && $dblimit<=0);
             }
             next;
         }
@@ -1239,6 +1243,11 @@ die "$cfgmain broken" unless($conf);
 # FIXME: Check that everything needed is included in config file(s). Currently
 #        things will just explode if stuff is missing.
 
+if($conf->{maxcache} < $conf->{maxdb}) {
+    error("config: maxcache must be at least as large as maxdb, overriding\n");
+    $conf->{maxcache} = $conf->{maxdb};
+}
+
 my $lastcfgcheck = timestep(time(), $conf->{cfgcheckinterval});
 
 my $hostsmtime = get_mtime($cfghosts);
@@ -1321,9 +1330,9 @@ while(1) {
             $lastiter = time();
         }
         elsif(timeleft($lastpurge, $conf->{purgeinterval}) <= 0) {
-            notice "DB Purge start, before: ".scalar keys(%entries)." entries\n";
+            notice "DB Purge start, periodic, before: cache=".scalar keys(%entries)." db=$dbentries\n";
             dopurge($conf->{maxage});
-            notice "DB Purge done, after: ".scalar keys(%entries)." entries\n";
+            notice "DB Purge done, periodic, after: cache=".scalar keys(%entries)." db=$dbentries\n";
         }
         else {
             my $newhmtime = get_mtime($cfghosts);
@@ -1405,11 +1414,44 @@ while(1) {
             my $res;
             my $state;
 
-            # If entry already exists, return it. No need to poke the same
-            # value into the dbm and force httpd to drop its cache.
+            # If entry is cached, return it.
             if(exists($entries{$str})) {
                 $res = $entries{$str}{val};
                 $state = "cached";
+
+                $entries{$str}{hits}++;
+
+                # Evaluate whether entry has enough hits to warrant
+                # promotion to DB.
+                if(!$entries{$str}{indb}) {
+                    # Require last hit to be recent
+                    if($entries{$str}{atime} + $conf->{maxhitage} < time()) {
+                        $entries{$str}{hits} = 1;
+                    }
+
+                    $entries{$str}{atime} = time();
+
+                    # Yup, it's popular!
+                    if($entries{$str}{hits} >= $conf->{hitspromote}) {
+                        if(tiedb()) {
+                            eval {
+                                $DB{$str} = $res;
+                            };
+                            if($@) {
+                                notice($@);
+                            }
+                            untiedb();
+                            # We'll never need these again
+                            delete $entries{$str}{hits};
+                            delete $entries{$str}{atime};
+
+                            $entries{$str}{indb} = 1;
+                            $dbentries++;
+                            $state .= " (promoted to DB)";
+                        }
+                    }
+                }
+
             }
             else {
                 my($inode, $size) = get_inode_size($str);
@@ -1418,23 +1460,14 @@ while(1) {
                 if(!$res) {
                     $res = finddest(0, \$str, $hash, $size);
                 }
-                if(tiedb()) {
-                    eval {
-                        $DB{$str} = $res;
-                    };
-                    if($@) {
-                        notice($@);
-                    }
-                    untiedb();
-                }
-
                 $state = "new";
                 my $info = "hash: $hash";
 
-                $entries{$str}{time} = time();
-                $entries{$str}{size} = $size;
-                $entries{$str}{hash} = $hash;
-                $entries{$str}{val}  = $res;
+                $entries{$str}{btime} = $entries{$str}{atime} = time();
+                $entries{$str}{size}  = $size;
+                $entries{$str}{hash}  = $hash;
+                $entries{$str}{val}   = $res;
+                $entries{$str}{hits}  = 1;
 
                 if($str =~ /$conf->{changinguris}/i) {
                     $entries{$str}{dostatcheck} = 1;
@@ -1492,16 +1525,19 @@ while(1) {
         }
     }
 
-    # Purge DB if we get too many entries.
-    if(scalar keys(%entries) > $conf->{maxentries}) {
-        notice "DB Purge start, over maxentries limit, before: ".scalar keys(%entries)." entries\n";
-        my $limit = int($conf->{maxentries} * 0.01);
-        my $threshold = $conf->{maxentries} - $limit;
+    # Purge cache and DB if we get too many entries.
+    if(scalar keys(%entries) > $conf->{maxcache} || $dbentries > $conf->{maxdb}) {
+        notice "DB Purge start, overflow, before: cache=".scalar keys(%entries)." db=$dbentries\n";
+        my $cachelimit = int($conf->{maxcache} * 0.01);
+        my $cachethreshold = $conf->{maxcache} - $cachelimit;
+        my $dblimit = int($conf->{maxdb} * 0.01);
+        my $dbthreshold = $conf->{maxdb} - $dblimit;
         my $age = int($conf->{maxage} / 2);
-        for(; scalar keys(%entries) > $threshold; $age = int($age / 2)) {
-            $limit = scalar keys(%entries) - $threshold;
-            dopurge($age, $limit, 1);
+        for(; scalar keys(%entries) > $cachethreshold || $dbentries > $dbthreshold; $age = int($age / 2)) {
+            $cachelimit = scalar keys(%entries) - $cachethreshold;
+            $dblimit = $dbentries - $dbthreshold;
+            dopurge($age, $cachelimit, $dblimit, 1);
         }
-        notice "DB Purge done, after: ".scalar keys(%entries)." entries using maxage=$age\n";
+        notice "DB Purge done, overflow, after: cache=".scalar keys(%entries)." db=$dbentries using maxage=$age\n";
     }
 }
