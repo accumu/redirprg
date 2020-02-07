@@ -1605,7 +1605,7 @@ while(1) {
             my $newhmtime = get_mtime($cfghosts);
             if($newhmtime > $hostsmtime) {
                 my $newhostsmtime = get_mtime($cfghosts);
-                my $newhosts = readjsonconf($cfghosts);
+                my $newhosts = readhostsconf($cfghosts);
                 if($newhosts) {
                     $hosts = $newhosts;
                     $hostsmtime = $newhostsmtime;
@@ -1627,7 +1627,7 @@ while(1) {
             my $newfmtime = get_mtime($cfgfixed);
             if($newfmtime > $fixedmtime) {
                 my $newfixedmtime = get_mtime($cfgfixed);
-                my $newfixed = readjsonconf($cfgfixed);
+                my $newfixed = readfixedconf($cfgfixed);
                 if($newfixed) {
                     $fixed = $newfixed;
                     $fixedmtime = $newfixedmtime;
