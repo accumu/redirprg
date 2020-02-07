@@ -71,6 +71,7 @@ use File::Path qw(make_path);
 use POSIX qw(strftime);
 use Time::HiRes;
 use JSON;
+use Getopt::Std;
 
 # FIXME: Debug
 #use Data::Dumper;
@@ -98,16 +99,7 @@ my $lastiter = time();
 my $is_desthost = 0;
 my $iterinterval;
 my $logprogname = 'redirprg';
-
-# Default to finding config in same dir as this script, but allow
-# passing the cfgbase as argument.
-my $cfgbase         = dirname(__FILE__) . "/redirprg";
-if($ARGV[0]) {
-    $cfgbase = $ARGV[0];
-}
-my $cfgmain         = "$cfgbase.conf";
-my $cfghosts        = "$cfgbase-hosts.conf";
-my $cfgfixed        = "$cfgbase-fixed.conf";
+my %opts;
 
 # $cfgmain file config items.
 my %cfgmainitems = (
@@ -243,6 +235,11 @@ sub logpreamble
 {
     my $level = shift;
     $level = 'notice' unless($level);
+
+    if($opts{t}) {
+        return "$level: ";
+    }
+
     my ($t, $us) = Time::HiRes::gettimeofday();
     $us = sprintf("%06d", $us);
 
@@ -287,8 +284,6 @@ sub readjsonconf {
 
         return undef;
     }
-
-    debug("Loading configuration from $file\n");
 
     # Read file and remove comments.
     my @cfg = grep(!/^\s*#/, (<$fh>));
@@ -1482,8 +1477,22 @@ sub timeleft
 # ============================================================================
 # main()
 
-$SIG{__DIE__} = sub {my $l = logpreamble('emerg').$_[0]; die($l);};
-$SIG{__WARN__} = sub{print STDERR logpreamble('warn'),$_[0];};
+getopts('t', \%opts) || die "Usage error";
+
+# Default to finding config in same dir as this script, but allow
+# passing the cfgbase as argument.
+my $cfgbase         = dirname(__FILE__) . "/redirprg";
+if($ARGV[0]) {
+    $cfgbase = $ARGV[0];
+}
+my $cfgmain         = "$cfgbase.conf";
+my $cfghosts        = "$cfgbase-hosts.conf";
+my $cfgfixed        = "$cfgbase-fixed.conf";
+
+if(! $opts{t}) {
+    $SIG{__DIE__} = sub {my $l = logpreamble('emerg').$_[0]; die($l);};
+    $SIG{__WARN__} = sub{print STDERR logpreamble('warn'),$_[0];};
+};
 
 # Disable buffering
 $| = 1;
@@ -1505,6 +1514,16 @@ die "$cfghosts broken" unless($hosts);
 my $fixedmtime = get_mtime($cfgfixed);
 $fixed = readfixedconf($cfgfixed);
 die "$cfgfixed broken" unless($fixed);
+
+if($opts{t}) {
+    print "Config files tested OK:\n\t$cfgmain\n\t$cfghosts\n\t$cfgfixed\n";
+    print "Exiting...\n";
+    exit 0;
+}
+
+debug("Loaded configuration from $cfgmain\n");
+debug("Loaded configuration from $cfghosts\n");
+debug("Loaded configuration from $cfgfixed\n");
 
 # Init last purge timestamp.
 $lastpurge = timestep(time(), $conf->{purgeinterval});
