@@ -1519,7 +1519,7 @@ sub timeleft
 # ============================================================================
 # main()
 
-getopts('t', \%opts) || die "Usage error";
+getopts('tq', \%opts) || die "Usage error";
 
 # Default to finding config in same dir as this script, but allow
 # passing the cfgbase as argument.
@@ -1547,6 +1547,10 @@ if($conf->{maxcache} < $conf->{maxdb}) {
     $conf->{maxcache} = $conf->{maxdb};
 }
 
+if($opts{q}) {
+    $conf->{loglevel} = 'error';
+}
+
 my $lastcfgcheck = timestep(time(), $conf->{cfgcheckinterval});
 
 my $hostsmtime = get_mtime($cfghosts);
@@ -1558,8 +1562,8 @@ $fixed = readfixedconf($cfgfixed);
 die "$cfgfixed broken" unless($fixed);
 
 if($opts{t}) {
-    print "Config files tested OK:\n\t$cfgmain\n\t$cfghosts\n\t$cfgfixed\n";
-    print "Exiting...\n";
+    notice "Config files tested OK:\n\t$cfgmain\n\t$cfghosts\n\t$cfgfixed\n";
+    notice "Exiting...\n";
     exit 0;
 }
 
