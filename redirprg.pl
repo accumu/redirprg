@@ -106,6 +106,11 @@ my %cfgmainitems = (
     ' PREAMBLE ' => {
         comment => 'redirprg.pl main configuration file. Loaded on startup only.',
     },
+    loglevel => {
+        desc => 'Minimum level of log messages to print, can be debug, notice or error.',
+        default => 'debug',
+        validre => '^(debug|notice|error)$',
+    },
     domain => {
 	desc => 'Domain name appended to all unqualified hostnames in config.',
 	default => "ftp.example.com",
@@ -247,19 +252,23 @@ sub logpreamble
 }
 
 
-# Log notice entry, simply write to stderr and it lands in the httpd log.
-sub notice {
-    my @args = @_;
-
-    print STDERR logpreamble('notice'),@args;
-}
-
-
 # Log debug entry, simply write to stderr and it lands in the httpd log.
 sub debug {
     my @args = @_;
 
+    return if($conf->{loglevel} ne 'debug');
+
     print STDERR logpreamble('debug'),@args;
+}
+
+
+# Log notice entry, simply write to stderr and it lands in the httpd log.
+sub notice {
+    my @args = @_;
+
+    return if($conf->{loglevel} !~ /^(debug|notice)$/);
+
+    print STDERR logpreamble('notice'),@args;
 }
 
 
@@ -326,6 +335,12 @@ sub readmainconf {
         return undef;
     }
 
+    if(ref($fref) ne 'HASH') {
+        error("config $file invalid - root object is not an hash\n");
+
+        return undef;
+    }
+
     # Copy defaults from the defined config items
     foreach my $k (keys %cfgmainitems) {
         $cfg{$k} = $cfgmainitems{$k}{default} if($cfgmainitems{$k}{default});
@@ -338,6 +353,13 @@ sub readmainconf {
             error("config $file item $k is unknown\n");
 
             return undef;
+        }
+        if($cfgmainitems{$k}{validre}) {
+            if($fref->{$k} !~ /$cfgmainitems{$k}{validre}/) {
+                error("Parsed $file item $k value $fref->{$k} is invalid\n");
+
+                return undef;
+            }
         }
         $cfg{$k} = $fref->{$k};
     }
@@ -377,6 +399,8 @@ sub readhostsconf {
             if($cfghostsitems{$k}{validre}) {
                 if($h->{$k} !~ /$cfghostsitems{$k}{validre}/) {
                     error("Parsed $file item $k value $h->{$k} is invalid\n");
+
+                    return undef;
                 }
             }
         }
