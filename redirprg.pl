@@ -788,10 +788,16 @@ sub calc_intervals() {
         }
         if($newdest ne $ref->{val}) {
             notice "Change $key: $ref->{val} -> $newdest\n";
-            eval {
-                $DB{$key} = $newdest;
-            };
             $ref->{val} = $newdest;
+            if($ref->{indb}) {
+                eval {
+                    $DB{$key} = $newdest;
+                };
+                if($@) {
+                    notice($@);
+                    delete $DB{$key}; # Don't leave stale entry in DB
+                }
+            }
         }
     }
 
@@ -992,10 +998,16 @@ sub updatefixed() {
         next unless($newdest);
         if($newdest ne $ref->{val}) {
             notice "Change $key: $ref->{val} -> $newdest\n";
-            eval {
-                $DB{$key} = $newdest;
-            };
             $ref->{val} = $newdest;
+            if($ref->{indb}) {
+                eval {
+                    $DB{$key} = $newdest;
+                };
+                if($@) {
+                    notice($@);
+                    delete $DB{$key}; # Don't leave stale entry in DB
+                }
+            }
         }
     }
 
@@ -1020,10 +1032,16 @@ sub updateburstfiles() {
         next unless($newdest);
         if($newdest ne $entries{$key}{val}) {
             notice "Change $key: $entries{$key}{val} -> $newdest\n";
-            eval {
-                $DB{$key} = $newdest;
-            };
             $entries{$key}{val} = $newdest;
+            if($entries{$key}{indb}) {
+                eval {
+                    $DB{$key} = $newdest;
+                };
+                if($@) {
+                    notice($@);
+                    delete $DB{$key}; # Don't leave stale entry in DB
+                }
+            }
         }
     }
 
