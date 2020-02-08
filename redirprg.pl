@@ -729,11 +729,11 @@ sub calc_intervals() {
     # Figure out which interval the living hosts serve
     for(my $i=0; $i <= $#$hosts; $i++) {
         if(!$hosts->[$i]->{up}) {
-            notice "Host $i:$hosts->[$i]->{name}  NOT UP\n";
+            debug "Host $i:$hosts->[$i]->{name}  NOT UP\n";
             next;
         }
         if(!$hosts->[$i]->{weight}) {
-            notice "Host $i:$hosts->[$i]->{name}  FIXED\n";
+            debug "Host $i:$hosts->[$i]->{name}  FIXED\n";
             next;
         }
 
@@ -787,14 +787,14 @@ sub calc_intervals() {
             $newdest = finddest(1, \$key, $ref->{hash}, $ref->{size});
         }
         if($newdest ne $ref->{val}) {
-            notice "Change $key: $ref->{val} -> $newdest\n";
+            debug "Change $key: $ref->{val} -> $newdest\n";
             $ref->{val} = $newdest;
             if($ref->{indb}) {
                 eval {
                     $DB{$key} = $newdest;
                 };
                 if($@) {
-                    notice($@);
+                    error($@);
                     delete $DB{$key}; # Don't leave stale entry in DB
                 }
             }
@@ -997,14 +997,14 @@ sub updatefixed() {
         my $newdest = findfixed($ref->{hash}, $ref->{size});
         next unless($newdest);
         if($newdest ne $ref->{val}) {
-            notice "Change $key: $ref->{val} -> $newdest\n";
+            debug "Change $key: $ref->{val} -> $newdest\n";
             $ref->{val} = $newdest;
             if($ref->{indb}) {
                 eval {
                     $DB{$key} = $newdest;
                 };
                 if($@) {
-                    notice($@);
+                    error($@);
                     delete $DB{$key}; # Don't leave stale entry in DB
                 }
             }
@@ -1031,14 +1031,14 @@ sub updateburstfiles() {
         my $newdest = finddest(1, \$key, $entries{$key}{hash}, $entries{$key}{size});
         next unless($newdest);
         if($newdest ne $entries{$key}{val}) {
-            notice "Change $key: $entries{$key}{val} -> $newdest\n";
+            debug "Change $key: $entries{$key}{val} -> $newdest\n";
             $entries{$key}{val} = $newdest;
             if($entries{$key}{indb}) {
                 eval {
                     $DB{$key} = $newdest;
                 };
                 if($@) {
-                    notice($@);
+                    error($@);
                     delete $DB{$key}; # Don't leave stale entry in DB
                 }
             }
@@ -1102,7 +1102,7 @@ sub dopurge {
                 delete $fixedhvals{$fixed->{$key}{hash}};
                 $fixedhvals{$newhash} = $key;
                 $fixed->{$key}{hash} = $newhash;
-                notice "Updated fixed redirect '$key'\n";
+                debug "Updated fixed redirect '$key'\n";
             }
             $fixed->{$key}{time} = $now;
         }
@@ -1144,7 +1144,7 @@ sub dopurge {
             }
             delete $entries{$key};
             $cachelimit-- if($quick);
-            notice "Purged $key from $delorigin\n";
+            debug "Purged $key from $delorigin\n";
             if($quick) {
                 last if($cachelimit<=0 && $dblimit<=0);
             }
@@ -1607,7 +1607,7 @@ while(1) {
             if($iter < 0) {
                 $iter = 0;
             }
-            notice "Updating multi-target redirects, iteration $iter\n";
+            debug "Updating multi-target redirects, iteration $iter\n";
             updatefixed();
             updateburstfiles();
             $iterinterval = random_interval($conf->{iterintervalmin}, 
@@ -1723,7 +1723,7 @@ while(1) {
                                 $DB{$str} = $res;
                             };
                             if($@) {
-                                notice($@);
+                                error($@);
                             }
                             untiedb();
                             # We'll never need these again
@@ -1768,10 +1768,10 @@ while(1) {
             }
 
             print "$res\n";
-            notice "$state: '$str' -> $res\n";
+            debug "$state: '$str' -> $res\n";
         }
         elsif($f == \*HOSTCHECK) {
-            notice "hoststatus: $str\n";
+            debug "hoststatus: $str\n";
             check_desthosts($str);
         }
         elsif($burstcheckpid && $f == \*BURSTCHECK) {
