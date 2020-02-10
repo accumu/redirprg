@@ -1181,7 +1181,8 @@ sub dopurge {
             # always be true, but it avoids a lot of stat's and is good enough
             $entries{$key}{hash} = $fchanged{$entries{$key}{hash}};
         }
-        if($createnewdb) {
+
+        if($createnewdb && $entries{$key}{indb}) {
             # Seed new DB file with all our entries
             eval {
                 $DB{$key} = $entries{$key}{val};
