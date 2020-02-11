@@ -410,7 +410,7 @@ sub analyze_timeslot($)
 				# Remove the rate caused by this file from the total
 				subtract_vector($offloads{$target}{avgvec}, $offloads{$target}{$file});
 			}
-			elsif($fval >= $fprethres) {
+			elsif($fprethres && $fval >= $fprethres) {
 				my $nextbf=1;
 				if($burstfiles{$file}) {
 					$nextbf += $burstfiles{$file}{burstfactor};
