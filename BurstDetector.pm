@@ -39,6 +39,7 @@ use Carp;
 use JSON;
 use Statistics::Basic qw(:all);
 use Statistics::Descriptive;
+use POSIX qw(strftime);
 
 my %config_keys = (
 	maxbw => 'Max target bandwidth, bytes/s',
@@ -290,7 +291,8 @@ sub analyze_bursts($)
 
 				push @{$burstfiles{$file}{times}}, $timeslot;
 				$burstfiles{$file}{burstfactor} ++;
-				debugprint "BURST($burstfiles{$file}{burstfactor}) on $target at $timeslot: fval $fval B/s maxbw $maxbw B/s file $file\n";
+				my $tsclock = strftime("%T", localtime($timeslot));
+				debugprint "BURST($burstfiles{$file}{burstfactor}) on $target at $tsclock: fval $fval B/s maxbw $maxbw B/s file $file\n";
 				push @ret, $file, $burstfiles{$file}{burstfactor};
 			}
 		}
@@ -314,7 +316,8 @@ sub analyze_bursts($)
 			# Never remove burst state unless file total is below
 			# detection threshold.
 			next if ($fsum > $burstfiles{$file}{detectthres});
-			debugprint "NOBURST detected at $timeslot: unburst $file\n";
+			my $tsclock = strftime("%T", localtime($timeslot));
+			debugprint "NOBURST detected at $tsclock: unburst $file\n";
 			delete $burstfiles{$file};
 			push @ret, $file, 0;
 		}
@@ -381,7 +384,8 @@ sub analyze_timeslot($)
 		my $tval = int(mean($offloads{$target}{avgvec})/$timeslotsize);
 
 		next if($tval < $tthres);
-		debugprint "Examining $target for file burst candidates at $timeslot: val $tval B/s tthres $tthres B/s\n";
+		my $tsclock = strftime("%T", localtime($timeslot));
+		debugprint "Examining $target for file burst candidates at $tsclock, rates (B/s): val=$tval tthres=$tthres fthres=$fthres maxbw=$maxbw stddev=".int($stddev)."\n";
 		foreach my $file(keys %{$offloads{$target}}) {
 			next unless($file =~ /^\//); # skip non-files
 			next if(defined($burstfiles{$file}));
@@ -557,7 +561,9 @@ sub reg_histslot($$)
 		if($forecasts{$slot}{$t}) {
 			my $residual = $histref->{$slot}{$t} - $forecasts{$slot}{$t};
 			$residuals{$t}->add_data($residual);
-			debugprint "rate on $t at $slot-",$slot+$config{default}{historyslotsize}-1,": forecast: $forecasts{$slot}{$t} B/s actual: $histref->{$slot}{$t} B/s stddev: ",int($residuals{$t}->standard_deviation())," B/s\n";
+			my $tstart = strftime("%T", localtime($slot));
+			my $tend = strftime("%T", localtime($slot+$config{default}{historyslotsize}-1));
+			debugprint "rate on $t at $tstart-$tend (B/s): forecast=$forecasts{$slot}{$t} actual=$histref->{$slot}{$t} stddev=",int($residuals{$t}->standard_deviation()),"\n";
 		}
 	}
 }
