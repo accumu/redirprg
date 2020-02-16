@@ -462,6 +462,56 @@ sub readfixedconf {
     return $fref;
 }
 
+
+# Parse HTTP Range request header according to RFC2626 14.35.1 and sum the
+# all ranges requested.
+# Input list of:
+# - The value of the HTTP Range header.
+# - The object (file) size.
+# Output list of:
+# - Sum of valid ranges, undef if none
+# - Number of ranges in request (regardless of valid or not)
+sub sum_http_range
+{
+	my ($hdr,$filesize) = @_;
+
+	my $rangesum;
+	my $rangecount=0;
+
+	if($hdr =~ /^bytes=/) {
+		foreach my $r (split /,/, $') {
+			$rangecount++;
+			next unless($r =~ /^(\d*)-(\d*)$/);
+			my $b = $1;
+			my $e = $2;
+			next if($b eq '' && $e eq '');
+
+			my $s;
+			if($b eq '' && $e ne '') {
+				if($e > $filesize) {
+					$e = $filesize;
+				}
+				$s = $e;
+			}
+			else {
+				if($e eq '' || $e >= $filesize) {
+					$e = $filesize - 1;
+				}
+				next if ($b > $e);
+				$s = $e-$b+1;
+			}
+
+			if(!$rangesum) {
+				$rangesum = 0;
+			}
+			$rangesum += $s;
+		}
+	}
+
+	return ($rangesum, $rangecount);
+}
+
+
 # Returns a random number between min and max.
 sub random_interval($$)
 {
@@ -1406,13 +1456,29 @@ sub burstcheckloop() {
         my $time;
         if($nfound) {
             my $line = $log->read;
+            # offload logformat:
             # 1580570309.494 127.22.123.45 GET host.ftp.acc.umu.se 10969556 /ubuntu/pool/main/l/linux-hwe/linux-headers-5.3.0-28_5.3.0-28.30~18.04.1_all.deb
-            if($line =~ /^(\d+)\S*\s(\S+)\sGET\s(\S+)\s(\d+)\s(.+)$/) {
+            # offloadV2 log format:
+            # 1581808464.533 127.11.22.33 GET bytes=0-10000 host.ftp.acc.umu.se 19124614 /mirror/media/StarWars-Revelations/day-1.mov
+            # 1581808500.034 127.11.22.33 GET - host.ftp.acc.umu.se 19124614 /mirror/media/StarWars-Revelations/day-1.mov
+            if($line =~ /^(\d+)\S*\s([0-9a-fA-F.:]+)\sGET(|\s(-|[[:alnum:]]+=\S+))\s([[:alnum:]_.-]+)\s(\d+)\s(.+)$/) {
                 $time = $1;
                 my $ip = $2;
-                my $target = $3;
-                my $size = $4;
-                my $file = $5;
+                my $range = $4;
+                my $target = $5;
+                my $size = $6;
+                my $file = $7;
+
+                my $rsize;
+                my $ranges = 1;
+                if($range && $range ne '-') {
+                    ($rsize, $ranges) = sum_http_range($range, $size);
+                }
+                if(!$rsize) {
+                    $rsize = $size;
+                }
+debug("offload: $time, $ip, $ranges, $rsize, $target, $size, $file\n");
+
 
                 # Avoid registering parallel downloaders as multiple downloads
                 if($seenfiles{"$ip:$file"} && $seenfiles{"$ip:$file"} >= int($time)) {
@@ -1426,8 +1492,20 @@ sub burstcheckloop() {
                 if($expire < $conf->{minseenexpire}) {
                     $expire = $conf->{minseenexpire};
                 }
+
+                # Add extra margins for clients that fetches parts of a file,
+                # or that simply behaves weird.
+                $expire *= $ranges; # Multiple ranges indicates weird client
+                # Fetching part of a file indicates multiple fetches will
+                # happen, ususally by slooow clients.
+                $expire = int($expire * sqrt($size/$rsize));
+debug("offload: expire=$expire\n");
+
                 $seenfiles{"$ip:$file"} = int($time) + $expire;
 
+                # One could argue that registering with $rsize would make
+                # sense here, but that would mask traffic by clients that aims
+                # subsequent requests directly at the offloader.
                 @res = BurstDetector::reg_offload($time, $target, $size, $file);
             }
             else {
