@@ -1156,9 +1156,54 @@ sub findfixed($$) {
     return "$hosts->[$hostsup[$iter % scalar(@hostsup)]]->{fqdn}_$size";
 }
 
+# Arguments: reference to list of entries to delete, timeout in seconds (float)
+# Returns: No explicit return value, pops processed entries from list reference
+sub handlepurge {
+    my ($ref, $timeout) = @_;
+    my $key;
 
-# Purge old records.
-sub dopurge {
+    my $start = [Time::HiRes::gettimeofday()];
+
+    my $dbtied = 0;
+
+    my $i = 0;
+    while ($key = pop @{$ref}) {
+        $i++;
+
+        my $delorigin = "cache";
+        if($entries{$key}{indb}) {
+            if(!$dbtied) {
+                if(!tiedb()) {
+                    # Replace the unprocessed entry in the list before aborting
+                    push @{$ref}, $key;
+                    return;
+                }
+                $dbtied = 1;
+            }
+            delete $DB{$key};
+            $delorigin = "DB";
+        }
+        delete $entries{$key};
+        debug "Purged $key from $delorigin\n";
+
+        if($timeout > 0 && $i % 100 == 0 && Time::HiRes::tv_interval($start) > $timeout) {
+            last;
+        }
+    }
+
+    if($dbtied) {
+        untiedb();
+    }
+}
+
+
+# Arguments:
+# maxage - max age of entries to keep (seconds)
+# cachelimit - Max number of cache entries to delete (only if quick)
+# dblimit - Max number of DB entries to delete (only if quick)
+# quick - quick mode, do bare minimum to find entries to purge
+# Find old records.
+sub findpurge {
     my ($maxage, $cachelimit, $dblimit, $quick) = @_;
     my $key;
 
@@ -1196,9 +1241,16 @@ sub dopurge {
             
     }
 
-    if(!tiedb($createnewdb)) {
-        return;
+    if($createnewdb) {
+        if(!tiedb($createnewdb)) {
+            return undef;
+        }
     }
+
+    # Separate DB and cache entries to be able to process all DB entries in
+    # one go when doing the actual purge.
+    my @dbdeletes;
+    my @cachedeletes;
 
     while ($key = each %entries) {
         # Revalidate dostatcheck entries by throwing them out and have
@@ -1208,21 +1260,21 @@ sub dopurge {
         if( $entries{$key}{dostatcheck} || 
             (($entries{$key}{btime} + $maxage < $now) && (!$quick || !$entries{$key}{indb} || $dblimit > 0)) )
         {
-            # Delete old entry
-            my $delorigin = "cache";
+            # Add to deletion list
             if($entries{$key}{indb}) {
-                delete $DB{$key};
+                push @dbdeletes, $key;
                 $dbentries--;
-                $delorigin = "DB";
                 $dblimit-- if($quick);
             }
-            delete $entries{$key};
+            else {
+                push @cachedeletes, $key;
+            }
             $cachelimit-- if($quick);
-            debug "Purged $key from $delorigin\n";
             if($quick) {
                 last if($cachelimit<=0 && $dblimit<=0);
             }
             next;
+
         }
 
         if(defined $fchanged{$entries{$key}{hash}}) {
@@ -1240,7 +1292,9 @@ sub dopurge {
         }
     }
 
-    untiedb();
+    if($createnewdb) {
+        untiedb();
+    }
 
     if(!$quick) {
         updatefixed();
@@ -1249,6 +1303,9 @@ sub dopurge {
         # Aim to do purging simultaneously on all hosts.
         $lastpurge = timestep($now, $conf->{purgeinterval});
     }
+
+    # Place DB entries in list so they can be processed together
+    return (@cachedeletes, @dbdeletes);
 }
 
 
@@ -1691,6 +1748,7 @@ if($burstcheckpid) {
 
 notice "redirprg.pl started\n";
 
+my @deletes;
 # Sit in this loop forever, serving targets for URI:s one at a time.
 while(1) {
     my $to = timeleft($lastcfgcheck, $conf->{cfgcheckinterval});
@@ -1706,6 +1764,11 @@ while(1) {
             $to = $ito;
         }
     }
+
+    if(@deletes) {
+        $to = 0;
+    }
+
     my @ready = $sel->can_read($to);
     if(! @ready) {
         # No fd's, maintenance time.
@@ -1722,9 +1785,18 @@ while(1) {
             $lastiter = time();
         }
         elsif(timeleft($lastpurge, $conf->{purgeinterval}) <= 0) {
-            notice "DB Purge start, periodic, before: cache=".scalar keys(%entries)." db=$dbentries\n";
-            dopurge($conf->{maxage});
-            notice "DB Purge done, periodic, after: cache=".scalar keys(%entries)." db=$dbentries\n";
+            notice "DB Purge find start, periodic, before: cache=".scalar keys(%entries)." db=$dbentries\n";
+            @deletes = findpurge($conf->{maxage});
+            debug "DB Purge find done, periodic, found " . scalar(@deletes) . " entries to delete\n";
+        }
+        elsif(@deletes) {
+            debug "DB Purge handle start, " . scalar(@deletes) . " entries to delete\n";
+            handlepurge(\@deletes, 0.05);
+            if(scalar(@deletes)) {
+                debug "DB Purge handle pause, " . scalar(@deletes) . " entries left to delete\n";
+            } else {
+                notice "DB Purge handle done, after: cache=".scalar keys(%entries)." db=$dbentries\n";
+            }
         }
         else {
             my $newhmtime = get_mtime($cfghosts);
@@ -1928,7 +2000,8 @@ while(1) {
         for(; scalar keys(%entries) > $cachethreshold || $dbentries > $dbthreshold; $age = int($age / 2)) {
             $cachelimit = scalar keys(%entries) - $cachethreshold;
             $dblimit = $dbentries - $dbthreshold;
-            dopurge($age, $cachelimit, $dblimit, 1);
+            @deletes = findpurge($age, $cachelimit, $dblimit, 1);
+            handlepurge(\@deletes, -1);
         }
         notice "DB Purge done, overflow, after: cache=".scalar keys(%entries)." db=$dbentries using maxage=$age\n";
     }
