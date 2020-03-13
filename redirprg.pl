@@ -864,8 +864,7 @@ sub calc_intervals() {
         return;
     }
 
-    my($key,$ref);
-    while (($key,$ref) = each %entries) {
+    while (my($key,$ref) = each %entries) {
         my $newdest = findfixed($ref->{hash}, $ref->{size});
         if(!$newdest) {
             $newdest = finddest(1, \$key, $ref->{hash}, $ref->{size});
@@ -1024,9 +1023,8 @@ sub findhash($$) {
 # Initiate state for fixed entries.
 sub initfixed() {
     my $multihost = 0;
-    my $k;
 
-    while ($k = each %{$fixed}) {
+    while (my $k = each %{$fixed}) {
         my ($inode, $size) = get_inode_size($k);
         my $hash = findhash($k, $inode);
         $fixed->{$k}{hash} = $hash;
@@ -1076,8 +1074,7 @@ sub updatefixed() {
         return;
     }
 
-    my($key,$ref);
-    while (($key,$ref) = each %entries) {
+    while (my ($key,$ref) = each %entries) {
         my $newdest = findfixed($ref->{hash}, $ref->{size});
         next unless($newdest);
         if($newdest ne $ref->{val}) {
@@ -1109,8 +1106,7 @@ sub updateburstfiles() {
 
     # As burst detection is based on the filename accessed it is enough to
     # only iterate through those files.
-    my $key;
-    while ($key = each %burstfiles) {
+    while (my $key = each %burstfiles) {
         next unless($entries{$key}); # Not likely, but...
         my $newdest = finddest(1, \$key, $entries{$key}{hash}, $entries{$key}{size});
         next unless($newdest);
@@ -1215,7 +1211,6 @@ sub handlepurge {
 # Find old records.
 sub findpurge {
     my ($maxage, $cachelimit, $dblimit, $quick) = @_;
-    my $key;
 
     my $now = time();
     my %fchanged;
@@ -1223,7 +1218,7 @@ sub findpurge {
 
     if(!$quick) {
         # Re-stat all fixed redirects every time we're doing a purge.
-        while ($key = each %{$fixed}) {
+        while (my $key = each %{$fixed}) {
             my($inode, $size) = get_inode_size($key);
             my $newhash = findhash($key, $inode);
             if($newhash != $fixed->{$key}{hash}) {
@@ -1263,22 +1258,22 @@ sub findpurge {
     my @dbdeletes;
     my @cachedeletes;
 
-    while ($key = each %entries) {
+    while (my($k, $v) = each %entries) {
         # Revalidate dostatcheck entries by throwing them out and have
         # new accesses bring them in again. That spreads the time needed
         # to do the stat():s, doing them all at once can take tens of seconds
         # for tens of thousands of entries.
-        if( $entries{$key}{dostatcheck} || 
-            (($entries{$key}{btime} + $maxage < $now) && (!$quick || !$entries{$key}{indb} || $dblimit > 0)) )
+        if( $v->{dostatcheck} || 
+            (($v->{btime} + $maxage < $now) && (!$quick || !$v->{indb} || $dblimit > 0)) )
         {
             # Add to deletion list
-            if($entries{$key}{indb}) {
-                push @dbdeletes, $key;
+            if($v->{indb}) {
+                push @dbdeletes, $k;
                 $dbentries--;
                 $dblimit-- if($quick);
             }
             else {
-                push @cachedeletes, $key;
+                push @cachedeletes, $k;
             }
             $cachelimit-- if($quick);
             if($quick) {
@@ -1288,17 +1283,17 @@ sub findpurge {
 
         }
 
-        if(defined $fchanged{$entries{$key}{hash}}) {
+        if(defined $fchanged{$v->{hash}}) {
             # Handle updated fixed entries. This blindly assumes that
             # all our entries always points to the same file. This won't
             # always be true, but it avoids a lot of stat's and is good enough
-            $entries{$key}{hash} = $fchanged{$entries{$key}{hash}};
+            $v->{hash} = $fchanged{$v->{hash}};
         }
 
-        if($createnewdb && $entries{$key}{indb}) {
+        if($createnewdb && $v->{indb}) {
             # Seed new DB file with all our entries
             eval {
-                $DB{$key} = $entries{$key}{val};
+                $DB{$k} = $v->{val};
             };
         }
     }
