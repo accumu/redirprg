@@ -807,6 +807,41 @@ sub finddest
     return "_";
 }
 
+# Recalculate entries, ie file <-> offloader mapping.
+# Arguments:
+# dbonly - if true only do entries in DB, if false only do non-DB entries
+sub recalc_entries {
+    my ($dbonly) = @_;
+
+    while (my($key,$ref) = each %entries) {
+        if( ($dbonly && !$ref->{indb}) || (!$dbonly && $ref->{indb}) ) {
+            next;
+        }
+
+        my $newdest;
+        if($fixedhvals{$key}) {
+            $newdest = findfixed($ref->{hash}, $ref->{size});
+        }
+        if(!$newdest) {
+            $newdest = finddest(1, \$key, $ref->{hash}, $ref->{size});
+        }
+        if($newdest ne $ref->{val}) {
+            debug "Change $key: $ref->{val} -> $newdest\n";
+            $ref->{val} = $newdest;
+            if($ref->{indb}) {
+                eval {
+                    $DB{$key} = $newdest;
+                };
+                if($@) {
+                    error($@);
+                    delete $DB{$key}; # Don't leave stale entry in DB
+                }
+            }
+        }
+    }
+
+}
+
 
 # Calculate the positions the living hosts should occupy in the "pie chart"
 sub calc_intervals() {
@@ -859,34 +894,16 @@ sub calc_intervals() {
         debug "Host $i:$hosts->[$i]->{name} weight: $hosts->[$i]->{weight} amount: $a middle: $hosts->[$i]->{middle} left: $hosts->[$i]->{left} right: $hosts->[$i]->{right}\n";
     }
 
-    # Recalculate which host serves what
-    if(!tiedb()) {
-        return;
+    # Recalculate which host serves what.
+    # Do DB entries first to block popular lookups as short time as possible.
+    if(tiedb()) {
+        recalc_entries(1);
+        untiedb();
     }
 
-    while (my($key,$ref) = each %entries) {
-        my $newdest = findfixed($ref->{hash}, $ref->{size});
-        if(!$newdest) {
-            $newdest = finddest(1, \$key, $ref->{hash}, $ref->{size});
-        }
-        if($newdest ne $ref->{val}) {
-            debug "Change $key: $ref->{val} -> $newdest\n";
-            $ref->{val} = $newdest;
-            if($ref->{indb}) {
-                eval {
-                    $DB{$key} = $newdest;
-                };
-                if($@) {
-                    error($@);
-                    delete $DB{$key}; # Don't leave stale entry in DB
-                }
-            }
-        }
-    }
-
-    untiedb();
+    # Recalculate non-DB entries
+    recalc_entries(0);
 }
-
 
 # Flag which hosts are up and recalculate who serves what if status has changed.
 # Argument is a string of the form
