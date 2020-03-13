@@ -107,9 +107,9 @@ my %cfgmainitems = (
         comment => 'redirprg.pl main configuration file. Loaded on startup only.',
     },
     loglevel => {
-        desc => 'Minimum level of log messages to print, can be debug, notice or error.',
+        desc => 'Minimum level of log messages to print, can be trace, debug, notice or error.',
         default => 'debug',
-        validre => '^(debug|notice|error)$',
+        validre => '^(trace|debug|notice|error)$',
     },
     domain => {
 	desc => 'Domain name appended to all unqualified hostnames in config.',
@@ -252,11 +252,21 @@ sub logpreamble
 }
 
 
+# Log trace entry, simply write to stderr and it lands in the httpd log.
+sub trace {
+    my @args = @_;
+
+    return if($conf->{loglevel} ne 'trace');
+
+    print STDERR logpreamble('trace'),@args;
+}
+
+
 # Log debug entry, simply write to stderr and it lands in the httpd log.
 sub debug {
     my @args = @_;
 
-    return if($conf->{loglevel} ne 'debug');
+    return if($conf->{loglevel} !~ /^(trace|debug)$/);
 
     print STDERR logpreamble('debug'),@args;
 }
@@ -266,7 +276,7 @@ sub debug {
 sub notice {
     my @args = @_;
 
-    return if($conf->{loglevel} !~ /^(debug|notice)$/);
+    return if($conf->{loglevel} !~ /^(trace|debug|notice)$/);
 
     print STDERR logpreamble('notice'),@args;
 }
@@ -739,7 +749,7 @@ sub finddest
         my $left = $hosts->[$i]->{left};
         my $right = $hosts->[$i]->{right};
 
-        #debug "$i:$hosts->[$i]->{name}  l: $left  r: $right\n";
+        trace "$i:$hosts->[$i]->{name}  l: $left  r: $right\n" if(!$quiet);
 
         if($left > $right) {
             # This occurs only for one host, the one in the "wrap-around".
@@ -1238,7 +1248,8 @@ sub findpurge {
         else {
             warn "Couldn't stat $dbfilename: $!\n";
         }
-            
+
+        trace "findpurge: re-stats of fixed redirects done\n";
     }
 
     if($createnewdb) {
@@ -1292,6 +1303,8 @@ sub findpurge {
         }
     }
 
+    trace "findpurge: find entries to delete and update fixed entries done\n";
+
     if($createnewdb) {
         untiedb();
     }
@@ -1302,6 +1315,7 @@ sub findpurge {
 
         # Aim to do purging simultaneously on all hosts.
         $lastpurge = timestep($now, $conf->{purgeinterval});
+        trace "findpurge: updating fixed and burst files done\n";
     }
 
     # Place DB entries in list so they can be processed together
@@ -1534,11 +1548,11 @@ sub burstcheckloop() {
                 if(!$rsize) {
                     $rsize = $size;
                 }
-debug("offload: $time, $ip, $ranges, $rsize, $target, $size, $file\n");
-
 
                 # Avoid registering parallel downloaders as multiple downloads
                 if($seenfiles{"$ip:$file"} && $seenfiles{"$ip:$file"} >= int($time)) {
+                    trace("offload: time=$time ip=$ip ranges=$ranges rsize=$rsize target=$target size=$size file=$file\n");
+
                     next;
                 }
 
@@ -1556,7 +1570,8 @@ debug("offload: $time, $ip, $ranges, $rsize, $target, $size, $file\n");
                 # Fetching part of a file indicates multiple fetches will
                 # happen, ususally by slooow clients.
                 $expire = int($expire * sqrt($size/$rsize));
-debug("offload: expire=$expire\n");
+
+                trace("offload: time=$time ip=$ip ranges=$ranges rsize=$rsize target=$target size=$size expire=$expire file=$file\n");
 
                 $seenfiles{"$ip:$file"} = int($time) + $expire;
 
