@@ -72,6 +72,7 @@ use POSIX qw(strftime);
 use Time::HiRes;
 use JSON;
 use Getopt::Std;
+$Getopt::Std::STANDARD_HELP_VERSION = 1; # Make --help behave as expected
 
 # FIXME: Debug
 #use Data::Dumper;
