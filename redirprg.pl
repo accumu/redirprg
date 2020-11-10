@@ -97,7 +97,8 @@ my %fixedhvals;
 my %burstfiles;
 my $iter = 0;
 my $lastiter = time();
-my $is_desthost = 0;
+my $is_desthost = undef;
+my $startupgrace = time();
 my $iterinterval;
 my $logprogname = 'redirprg';
 my %opts;
@@ -187,6 +188,10 @@ my %cfgmainitems = (
     cfgcheckinterval => {
 	desc => 'How often to check hosts and fixed redirect config files for changes (seconds).',
         default => "60",
+    },
+    startupgracetime => {
+	desc => 'Gracetime after startup/reload when we are more permissive about serving requests instead of redirecting, with the aim of avoiding ping-pong redirect loops on configuration changes (seconds).',
+        default => "120",
     },
     offloadlogfile => {
 	desc => 'Offload log file, used by BurstDetector. Passed through strftime().',
@@ -646,6 +651,8 @@ sub getcanonnameandip($)
 sub resolve_desthosts() {
     my $totweight = 0;
 
+    $is_desthost = undef;
+
     for(my $i=0; $i <= $#$hosts; $i++) {
         my ($fqdn, $hostip) = getcanonnameandip($hosts->[$i]->{name});
 
@@ -658,8 +665,8 @@ sub resolve_desthosts() {
         $hosts->[$i]->{hostip} = $hostip;
 
         if($myfqdn{$fqdn}) {
-            $is_desthost = 1;
-            debug "$fqdn is configured as a destination host\n";
+            $is_desthost = $i;
+            debug "$fqdn is configured as destination host index $is_desthost\n";
         }
 
         if(!$hosts->[$i]->{checkuri} && $hosts->[$i]->{name} =~ /\./) {
@@ -719,7 +726,6 @@ sub get_myfqdn() {
     debug "myfqdn: $fqdn\n";
 }
 
-
 # Find a destination for this file.
 # Argument: filename reference, hash value, file size (if available)
 # Returns: Target hostname_filesize or _ if no redirect.
@@ -731,17 +737,30 @@ sub finddest
     my $size = shift;
     my $testiter = shift;
     my $destidx;
-
+    my $disabled = 0;
+    
     if(!$testiter) {
         $testiter = $iter;
     }
 
-    # Don't do redirect for non-existant files or small objects.
-    if(!defined($size)) {
-        return "_";
+    if(defined($is_desthost)) {
+        if($startupgrace) {
+            debug "'${$fileref}' not redirected - In startup gracetime\n" if(!$quiet);
+            return "_";
+        }
+        elsif($hosts->[$is_desthost]->{disabled} eq "yes") {
+            $disabled = 1;
+        }
     }
-    if($size < $conf->{minredirsize}) {
-        return "_";
+
+    if(!$disabled) {
+        # Don't do redirect for non-existant files or small objects.
+        if(!defined($size)) {
+            return "_";
+        }
+        if($size < $conf->{minredirsize}) {
+            return "_";
+        }
     }
 
     for(my $i=0; $i <= $#$hosts; $i++) {
@@ -774,7 +793,7 @@ sub finddest
     }
 
 
-    if($is_desthost) {
+    if(defined($is_desthost) && !$disabled) {
         # Hosts defined as destination hosts, normally offload targets, also
         # accepts files with "neighbor" hosts as primary target. This is to
         # enable burst load handling by automatically offload popular files
@@ -1749,7 +1768,7 @@ initfixed();
 calc_intervals();
 my $hostcheckpid = inithostcheck();
 my $burstcheckpid;
-if(!$is_desthost) {
+if(!defined($is_desthost)) {
     # Burst file detection only makes sense on Frontends...
     $burstcheckpid = initburstcheck();
 }
@@ -1826,14 +1845,24 @@ while(1) {
                 notice "DB Purge handle done, after: cache=".scalar keys(%entries)." db=$dbentries\n";
             }
         }
+        elsif($startupgrace && (time()-$startupgrace > $conf->{startupgracetime}))
+        {
+            $startupgrace = 0;
+            debug "Startup gracetime expired, resuming normal mode operation.\n";
+            # Immediately trigger a DB purge since up until now we've handled
+            # all requests ourselves instead of redirecting.
+            $lastpurge = 0;
+        }
         else {
             my $newhmtime = get_mtime($cfghosts);
             if($newhmtime > $hostsmtime) {
                 my $newhostsmtime = get_mtime($cfghosts);
                 my $newhosts = readhostsconf($cfghosts);
                 if($newhosts) {
+                    # Replace current config with new one
                     $hosts = $newhosts;
                     $hostsmtime = $newhostsmtime;
+                    $startupgrace = time();
                     resolve_desthosts();
                     calc_intervals();
 
@@ -1960,6 +1989,13 @@ while(1) {
                 $entries{$str}{hash}  = $hash;
                 $entries{$str}{val}   = $res;
                 $entries{$str}{hits}  = 1;
+
+                # During startupgrace we are more permissive, so record late
+                # begintime so entries gets revalidated after startupgrace
+                # has expired.
+                if($startupgrace) {
+                    $entries{$str}{btime} = $startupgrace - $conf->{maxage} + $conf->{startupgracetime};
+                }
 
                 if($str =~ /$conf->{changinguris}/i) {
                     $entries{$str}{dostatcheck} = 1;
