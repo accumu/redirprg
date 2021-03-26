@@ -178,7 +178,7 @@ my %cfgmainitems = (
         default => "43",
     },
     minredirsize => {
-	desc => "Don't redirect objects less than this size (bytes).",
+	desc => "Don't redirect objects less than this size (bytes). When used together with libhttpcacheopen, keep this in sync with config.h CACHE_BF_SIZE.",
         default => "4194304",
     },
     changinguris => {
