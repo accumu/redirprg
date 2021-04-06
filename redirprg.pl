@@ -264,7 +264,9 @@ sub trace {
 
     return if($conf->{loglevel} ne 'trace');
 
-    print STDERR logpreamble('trace'),@args;
+    # print does one write() per argument, which might cause our logging
+    # to be interlaced with httpd logging. So join args to one string.
+    print STDERR join("", logpreamble('trace'),@args);
 }
 
 
@@ -274,7 +276,7 @@ sub debug {
 
     return if($conf->{loglevel} !~ /^(trace|debug)$/);
 
-    print STDERR logpreamble('debug'),@args;
+    print STDERR join("", logpreamble('debug'),@args);
 }
 
 
@@ -284,7 +286,7 @@ sub notice {
 
     return if($conf->{loglevel} !~ /^(trace|debug|notice)$/);
 
-    print STDERR logpreamble('notice'),@args;
+    print STDERR join("", logpreamble('notice'),@args);
 }
 
 
@@ -292,7 +294,7 @@ sub notice {
 sub error {
     my @args = @_;
 
-    print STDERR logpreamble('error'),@args;
+    print STDERR join("", logpreamble('error'),@args);
 }
 
 
