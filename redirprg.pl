@@ -1999,7 +1999,7 @@ while(1) {
                     $entries{$str}{btime} = $startupgrace - $conf->{maxage} + $conf->{startupgracetime};
                 }
 
-                if($str =~ /$conf->{changinguris}/i) {
+                if($res ne "_" && $str =~ /$conf->{changinguris}/i) {
                     $entries{$str}{dostatcheck} = 1;
                     $info .= ", dostatcheck";
                 }
